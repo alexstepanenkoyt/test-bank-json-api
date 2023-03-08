@@ -14,6 +14,7 @@ type Storage interface {
 	UpdateAccount(*Account) error
 	GetAccounts() ([]*Account, error)
 	GetAccountByID(int) (*Account, error)
+	GetAccountByNumber(int32) (*Account, error)
 }
 
 type PostgresStorage struct {
@@ -46,6 +47,7 @@ func (s *PostgresStorage) createAccountTable() error {
 		first_name varchar(50),
 		last_name varchar(50),
 		number serial,
+		encrypted_password varchar(100),
 		balance serial,
 		created_at timestamp
 	)`
@@ -56,11 +58,11 @@ func (s *PostgresStorage) createAccountTable() error {
 
 func (s *PostgresStorage) CreateAccount(account *Account) error {
 	query := `insert into account
-	(first_name, last_name, number, balance, created_at)
-	values ($1, $2, $3, $4, $5)`
+	(first_name, last_name, number, encrypted_password,balance, created_at)
+	values ($1, $2, $3, $4, $5, $6)`
 
 	if _, err := s.db.Exec(query, account.FirstName, account.LastName,
-		account.Number, account.Balance, account.CreatedAt); err != nil {
+		account.Number, account.EncryptedPassword, account.Balance, account.CreatedAt); err != nil {
 		return err
 	}
 
@@ -77,6 +79,19 @@ func (s *PostgresStorage) DeleteAccount(id int) error {
 
 func (s *PostgresStorage) UpdateAccount(*Account) error {
 	return nil
+}
+
+func (s *PostgresStorage) GetAccountByNumber(number int32) (*Account, error) {
+	rows, err := s.db.Query("select * from account where number = $1", number)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		return scanIntoAccount(rows)
+	}
+
+	return nil, fmt.Errorf("Account with number [%d] was not found", number)
 }
 
 func (s *PostgresStorage) GetAccountByID(id int) (*Account, error) {
@@ -113,6 +128,6 @@ func (s *PostgresStorage) GetAccounts() ([]*Account, error) {
 func scanIntoAccount(rows *sql.Rows) (*Account, error) {
 	account := new(Account)
 	err := rows.Scan(&account.ID, &account.FirstName, &account.LastName,
-		&account.Number, &account.Balance, &account.CreatedAt)
+		&account.Number, &account.EncryptedPassword, &account.Balance, &account.CreatedAt)
 	return account, err
 }
